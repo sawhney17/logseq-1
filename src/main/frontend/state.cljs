@@ -145,7 +145,10 @@
      :electron/user-cfgs                    nil
 
      ;; mobile
+     :mobile/show-action-bar?               false
+     :mobile/actioned-block                 nil
      :mobile/show-toolbar?                  false
+     :mobile/show-recording-bar?            false
      ;;; toolbar icon doesn't update correctly when clicking after separate it from box,
      ;;; add a random in (<= 1000000) to observer its update
      :mobile/toolbar-update-observer        0
@@ -174,7 +177,7 @@
      :plugin/updates-downloading?           false
      :plugin/updates-unchecked              #{}
      :plugin/navs-settings?                 true
-     :plugin/focused-settings               nil            ;; plugin id
+     :plugin/focused-settings               nil ;; plugin id
 
      ;; pdf
      :pdf/current                           nil
@@ -564,21 +567,6 @@
   []
   (sub [:editor/content (get-edit-input-id)]))
 
-(defn append-current-edit-content!
-  [append-text]
-  (when-not (string/blank? append-text)
-    (when-let [input-id (get-edit-input-id)]
-      (when-let [input (gdom/getElement input-id)]
-        (let [value (gobj/get input "value")
-              new-value (str value append-text)
-              new-value (if (or (= (last value) " ")
-                                (= (last value) "\n"))
-                          new-value
-                          (str "\n" new-value))]
-          (js/document.execCommand "insertText" false append-text)
-          (update-state! :editor/content (fn [m]
-                                           (assoc m input-id new-value))))))))
-
 (defn get-cursor-range
   []
   (:cursor-range @state))
@@ -856,7 +844,10 @@
              (util/set-change-value input content))
 
            (when move-cursor?
-             (cursor/move-cursor-to input pos))))))))
+             (cursor/move-cursor-to input pos))
+
+           (when (or (util/mobile?) (mobile-util/native-platform?))
+             (set-state! :mobile/show-action-bar? false))))))))
 
 (defn clear-edit!
   []
