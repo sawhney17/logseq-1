@@ -1795,6 +1795,9 @@
        (int? v)
        v
 
+       (= k :file-path)
+       v
+
        date
        date
 
@@ -2094,12 +2097,14 @@
     [:div.indent (ui/icon "indent-increase" {:style {:fontSize 16}})]]])
 
 (rum/defc block-right-menu < rum/reactive
-  [_config {:block/keys [uuid] :as _block}]
+  [_config {:block/keys [uuid] :as _block} edit?]
   [:div.block-right-menu.flex.bg-base-2.rounded-md.ml-1
    [:div.commands-button.w-0.flex.flew-col.rounded-md
-    {:id (str "block-right-menu-" uuid)}
-    [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})]
-    [:div.outdent (ui/icon "indent-decrease" {:style {:fontSize 16}})]]])
+    {:id (str "block-right-menu-" uuid)
+     :style {:max-width (if edit? 40 80)}}
+    [:div.outdent (ui/icon "indent-decrease" {:style {:fontSize 16}})]
+    (when-not edit?
+      [:div.more (ui/icon "dots-circle-horizontal" {:style {:fontSize 16}})])]])
 
 (rum/defcs block-content-or-editor < rum/reactive
   (rum/local true :hide-block-refs?)
@@ -2431,7 +2436,7 @@
         :data-collapsed (and collapsed? has-child?)
         :class (str uuid
                     (when pre-block? " pre-block")
-                    (when (and card? (not review-cards?)) " shadow-xl")
+                    (when (and card? (not review-cards?)) " shadow-md")
                     (when (:ui/selected? block) " selected noselect"))
         :blockid (str uuid)
         :haschild (str has-child?)}
@@ -2462,9 +2467,9 @@
 
      [:div.flex.flex-row.pr-2
       {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
-       :on-touch-start block-handler/on-touch-start
+       :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
        :on-touch-move (fn [event]
-                        (block-handler/on-touch-move event block uuid *show-left-menu? *show-right-menu?))
+                        (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
        :on-touch-end (fn [event]
                        (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
        :on-touch-cancel block-handler/on-touch-cancel
@@ -2479,7 +2484,7 @@
         (block-left-menu config block))
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)
       (when @*show-right-menu?
-        (block-right-menu config block))]
+        (block-right-menu config block edit?))]
 
      (block-children config children collapsed?)
 
@@ -2735,6 +2740,8 @@
   [state config {:keys [title query view collapsed? children? breadcrumb-show? table-view?] :as q}]
   (let [dsl-query? (:dsl-query? config)
         query-atom (:query-atom state)
+        repo (state/get-current-repo)
+        view-fn (if (keyword? view) (state/sub [:config repo :query/views view]) view)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
         current-block (db/entity [:block/uuid current-block-uuid])
@@ -2755,7 +2762,7 @@
         _ (when-let [query-result (:query-result config)]
             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
               (reset! query-result result)))
-        view-f (and view (sci/eval-string (pr-str view)))
+        view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         only-blocks? (:block/uuid (first result))
         blocks-grouped-by-page? (and (seq result)
                                      (not not-grouped-by-page?)
@@ -2774,8 +2781,8 @@
       (when-not (and built-in? (empty? result))
         [:div.custom-query.mt-4 (get config :attr {})
          (ui/foldable
-          [:div.custom-query-title
-           [:span.title-text (cond
+          [:div.custom-query-title.flex.justify-between.w-full
+           [:div [:span.title-text (cond
                                (vector? title) title
                                (string? title) (inline-text config
                                                             (get-in config [:block :block/format] :markdown)
@@ -2783,6 +2790,13 @@
                                :else title)]
            [:span.opacity-60.text-sm.ml-2.results-count
             (str (count transformed-query-result) " results")]]
+           ;;insert an "edit" button in the query view
+           [:a.opacity-70.hover:opacity-100.svg-small.inline 
+            {:on-mouse-down (fn [e]
+                              (util/stop e)
+                              (editor-handler/edit-block! current-block :max (:block/uuid current-block)))}
+            svg/edit]]
+          
           (fn []
             [:div
              (when (and current-block (not view-f) (nil? table-view?))

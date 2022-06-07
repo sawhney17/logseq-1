@@ -27,6 +27,7 @@
      :system/events                         (async/chan 100)
      :db/batch-txs                          (async/chan 100)
      :file/writes                           (async/chan 100)
+     :file/unlinked-dirs                    #{}
      :reactive/custom-queries               (async/chan 100)
      :notification/show?                    false
      :notification/content                  nil
@@ -1437,7 +1438,7 @@
 (defn set-copied-full-blocks
   [content blocks]
   (set-state! :copy/blocks {:copy/graph (get-current-repo)
-                            :copy/content content
+                            :copy/content (or content (get-in @state [:copy/blocks :copy/content]))
                             :copy/full-blocks blocks}))
 
 (defn set-copied-full-blocks!
